@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Angličtina z mého bytu</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#181b22; --line:#2a2f3a; --ink:#f2f4f8; --mute:#9aa3b2;
+    --accent:#2f6bff; --accent2:#ffc400; --good:#33c27a; --warn:#ff9f1a; --bad:#ff5a5a; --blue:#55b6ff;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  button{font:inherit;color:inherit;cursor:pointer}
+  .wrap{max-width:560px;margin:0 auto;padding:16px 16px 40px}
+  header{display:flex;align-items:center;gap:10px;margin:4px 0 16px}
+  header h1{font-size:22px;margin:0;flex:1}
+  .back{background:none;border:0;font-size:24px;padding:4px 8px;margin-left:-8px}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:22px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 6px;text-align:center}
+  .stat b{display:block;font-size:28px;line-height:1.1}
+  .stat span{font-size:12px;color:var(--mute)}
+  h2{font-size:22px;margin:0 0 6px}
+  p.mute,.mute{color:var(--mute)}
+  .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:56px;border-radius:14px;border:0;background:var(--accent);font-size:18px;font-weight:650;margin-top:12px}
+  .btn:disabled{opacity:.4}
+  .btn.ghost{background:transparent;border:1.5px solid var(--line)}
+  .btn.small{min-height:44px;font-size:16px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .room{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;text-align:left;padding:0}
+  .room img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover}
+  .room div{padding:10px 12px;font-weight:600}
+  .room small{display:block;color:var(--mute);font-weight:400}
+  .photo{position:relative;width:100%;border-radius:14px;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+  .photo img{display:block;width:100%;pointer-events:none}
+  .label{position:absolute;transform:translate(-50%,-50%);background:rgba(30,94,255,.92);border:1.5px solid #fff;border-radius:20px;padding:5px 10px;font-weight:700;font-size:14px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.5);touch-action:none}
+  .label.dragging{background:var(--accent2);color:#111}
+  .marker{position:absolute;width:34px;height:34px;transform:translate(-50%,-50%);border-radius:50%;background:rgba(255,196,0,.85);border:3px solid #fff;animation:pulse .9s ease-in-out infinite alternate}
+  @keyframes pulse{from{transform:translate(-50%,-50%) scale(.8)}to{transform:translate(-50%,-50%) scale(1.25)}}
+  .hint{font-size:13px;color:var(--mute);text-align:center;margin:8px 0 0}
+  .row{display:flex;gap:8px}
+  .row>*{flex:1}
+  .grade{min-height:54px;border-radius:12px;background:transparent;font-weight:650;border:1.5px solid}
+  .g0{color:var(--bad);border-color:var(--bad)} .g1{color:var(--warn);border-color:var(--warn)}
+  .g2{color:var(--good);border-color:var(--good)} .g3{color:var(--blue);border-color:var(--blue)}
+  .answer{font-size:28px;font-weight:800;margin:10px 0 0;display:flex;align-items:center;gap:10px}
+  .icon{background:var(--card);border:1px solid var(--line);border-radius:50%;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .sent{font-style:italic;margin-top:8px}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center;z-index:10}
+  .sheet{background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:560px;padding:20px 20px 28px;max-height:90vh;overflow:auto}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+  .chip{background:transparent;border:1.5px solid var(--line);border-radius:20px;padding:8px 14px}
+  input[type=text]{width:100%;background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:12px;color:var(--ink);font-size:16px;margin-top:8px}
+  label.field{display:block;margin-top:10px;font-size:13px;color:var(--mute)}
+  .busy{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:20;text-align:center;padding:24px}
+  .spin{width:42px;height:42px;border:4px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:s 1s linear infinite}
+  @keyframes s{to{transform:rotate(360deg)}}
+  .note{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:24px}
+  .err{color:var(--bad)}
+  .toggle{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:6px 12px;font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="mute">Načítám…</p></div>
+<div id="layer"></div>
+
+<script>
+// ---------- stav ----------
+const S = {
+  db:null, sample:null, uid:null, canImages:false,
+  rooms:[], meta:{}, loaded:false, loadErr:'',
+  view:'today', roomId:null, hide:false, revealed:null, addMode:false,
+  queue:[], qDone:0, phase:'ask'
+};
+const NEW_PER_DAY = 15;
+const $app = document.getElementById('app');
+const $layer = document.getElementById('layer');
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const today = () => { const d=new Date(); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); };
+const yesterday = () => { const d=new Date(Date.now()-864e5); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); };
+const rid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+
+// ---------- hlas ----------
+function say(text, slow){
+  try{
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US'; u.rate = slow ? 0.6 : 0.9;
+    const v = speechSynthesis.getVoices().find(v => v.lang && v.lang.replace('_','-').startsWith('en-US'));
+    if (v) u.voice = v;
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+  }catch(e){}
+}
+
+// ---------- zápisy: jeden zápis na dokument najednou ----------
+const chains = {};
+function save(docId, data){
+  if (!S.db || !S.uid) return Promise.resolve();
+  const ref = S.db.collection('data/users/' + S.uid).doc(docId);
+  const run = () => ref.set(data).catch(e => {
+    toast(e && e.code === 'quota_exceeded' ? 'Úložiště je plné, smaž nějakou místnost.' : 'Uložení se nepovedlo, zkus to znovu.');
+  });
+  chains[docId] = (chains[docId] || Promise.resolve()).then(run);
+  return chains[docId];
+}
+function remove(docId){
+  if (!S.db || !S.uid) return;
+  S.db.collection('data/users/' + S.uid).doc(docId).delete().catch(()=>{});
+}
+function saveRoom(r){ const {id, ...body} = r; return save(id, body); }
+function saveMeta(){ return save('meta', {...S.meta}); }
+
+// ---------- opakování v rozestupech (zjednodušené SM-2) ----------
+function applyGrade(w, g){
+  const now = Date.now();
+  w.ease = w.ease || 2.5; w.interval = w.interval || 0; w.reps = w.reps || 0; w.lapses = w.lapses || 0;
+  if (g === 0){
+    w.lapses++; w.reps = 0; w.interval = 0;
+    w.ease = Math.max(1.3, w.ease - 0.2);
+    w.due = now + 10*60*1000; return;
+  }
+  if (g === 1){ w.interval = w.reps === 0 ? 1 : Math.min(365, Math.max(1, w.interval*1.2)); w.ease = Math.max(1.3, w.ease-0.15); }
+  if (g === 2){ w.interval = w.reps === 0 ? 1 : w.reps === 1 ? 3 : Math.min(365, w.interval*w.ease); }
+  if (g === 3){ w.interval = w.reps === 0 ? 3 : Math.min(365, w.interval*w.ease*1.3); w.ease = Math.min(3, w.ease+0.15); }
+  w.reps++;
+  w.due = now + Math.round(w.interval*24*60)*60*1000;
+}
+const isNew = w => !w.reps && !w.lapses;
+
+function newLeft(){
+  const n = S.meta.newDate === today() ? (S.meta.newCount || 0) : 0;
+  return Math.max(0, NEW_PER_DAY - n);
+}
+function streak(){
+  const d = S.meta.streakDate;
+  return (d === today() || d === yesterday()) ? (S.meta.streak || 0) : 0;
+}
+function stats(){
+  const now = Date.now(); let total=0, learned=0, due=0, fresh=0;
+  for (const r of S.rooms) for (const w of r.words){
+    total++; if ((w.interval||0) >= 7) learned++;
+    if (isNew(w)) fresh++; else if ((w.due||0) <= now) due++;
+  }
+  return {total, learned, due, newToday: Math.min(fresh, newLeft()), streak: streak()};
+}
+function buildQueue(roomId){
+  const now = Date.now(), due = [], fresh = [];
+  for (const r of S.rooms){
+    if (roomId && r.id !== roomId) continue;
+    for (const w of r.words){
+      if (isNew(w)) fresh.push({r:r.id, w:w.id});
+      else if ((w.due||0) <= now) due.push({r:r.id, w:w.id, due:w.due||0});
+    }
+  }
+  due.sort((a,b) => a.due - b.due);
+  return [...due, ...fresh.slice(0, newLeft())];
+}
+const findRoom = id => S.rooms.find(r => r.id === id);
+const findWord = (rId, wId) => { const r = findRoom(rId); return r ? r.words.find(w => w.id === wId) : null; };
+
+// ---------- obrázky ----------
+function loadImage(file){
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file); const img = new Image();
+    img.onload = () => res(img); img.onerror = () => rej(new Error('Fotku se nepodařilo načíst.'));
+    img.src = url;
+  });
+}
+function scaled(img, max, q, asBlob){
+  const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.naturalWidth*k); c.height = Math.round(img.naturalHeight*k);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  if (asBlob) return new Promise(r => c.toBlob(r, 'image/jpeg', q));
+  return {data: c.toDataURL('image/jpeg', q), w: c.width, h: c.height};
+}
+
+// ---------- AI: štítky na fotce ----------
+function promptFor(roomName){
+  return `Jsi lektor angličtiny pro Čecha (začátečník). Na fotce je místo z jeho běžného dne: "${roomName}".
+Najdi 8–15 dobře viditelných předmětů, které se hodí naučit (běžné věci, ne značky).
+Ke každému vrať objekt:
+- "en": anglický název bez členu (např. "kettle", "cutting board")
+- "cs": český překlad
+- "pron": výslovnost přepsaná česky, jak by ji četl Čech (např. "ketl", "katyng bórd")
+- "x", "y": střed předmětu na fotce jako číslo 0–1 (0,0 = levý horní roh)
+- "sentence_en": krátká věta (max 8 slov) o činnosti s tím předmětem, 1. osoba, přítomný čas
+- "sentence_cs": její český překlad
+Odpověz pouze JSON polem, např. [{"en":"kettle","cs":"konvice","pron":"ketl","x":0.4,"y":0.55,"sentence_en":"I'm boiling water in the kettle.","sentence_cs":"Vařím vodu v konvici."}]`;
+}
+const SAMPLE_ERR = {
+  not_granted:'Appka nemá povolení používat Clauda. Povol ho v dialogu a zkus to znovu.',
+  rate_limited:'Teď je toho moc najednou, zkus to za chvíli.',
+  session_expired:'Přihlas se znovu na claude.ai.',
+  image_rejected:'Tuhle fotku nejde použít, zkus jinou.',
+  images_unavailable:'Tady nejde posílat fotky Claudovi.',
+  invalid_json:'Claude odpověděl nečekaně, zkus to znovu.',
+  refused:'Claude tuhle fotku odmítl, zkus jinou.'
+};
+
+async function addRoom(name, file){
+  busy('Hledám věci na fotce…<br><span class="mute">trvá to zhruba 10–40 sekund</span>');
+  try{
+    const img = await loadImage(file);
+    const small = scaled(img, 900, 0.72);
+    const aiBlob = await scaled(img, 1400, 0.85, true);
+    let list = [];
+    try{
+      list = await S.sample.json(promptFor(name), {images:[aiBlob]});
+    }catch(e){
+      throw new Error(SAMPLE_ERR[e && e.code] || 'Rozpoznání se nepovedlo, zkus to znovu.');
+    }
+    if (!Array.isArray(list)) list = [];
+    const n01 = v => { const x = Number(v); return isFinite(x) ? Math.min(1, Math.max(0, x)) : 0.5; };
+    const words = list.filter(o => o && o.en).slice(0, 20).map(o => ({
+      id: rid('w'), en: String(o.en).trim(), cs: String(o.cs||'').trim(), pron: String(o.pron||'').trim(),
+      x: n01(o.x), y: n01(o.y), sen: String(o.sentence_en||'').trim(), scs: String(o.sentence_cs||'').trim(),
+      due:0, interval:0, ease:2.5, reps:0, lapses:0
+    }));
+    const room = {id: rid('room-'), name, img: small.data, w: small.w, h: small.h, created: Date.now(), words};
+    S.rooms.push(room);
+    await saveRoom(room);
+    S.view = 'room'; S.roomId = room.id; S.hide = false;
+    unbusy(); render();
+    if (!words.length) toast('Na fotce jsem nic nenašel. Přidej slova ručně tlačítkem + Slovo.');
+  }catch(e){
+    unbusy(); toast(e.message || 'Něco se nepovedlo.');
+  }
+}
+
+// ---------- pomocné UI ----------
+function busy(html){ $layer.innerHTML = `<div class="busy"><div class="spin"></div><div>${html}</div></div>`; }
+function unbusy(){ $layer.innerHTML = ''; }
+let toastT;
+function toast(msg){
+  clearTimeout(toastT);
+  let t = document.getElementById('toast');
+  if (!t){ t = document.createElement('div'); t.id='toast';
+    t.style.cssText='position:fixed;left:16px;right:16px;bottom:20px;max-width:528px;margin:auto;background:#2a2f3a;padding:14px 16px;border-radius:12px;z-index:30;box-shadow:0 4px 16px rgba(0,0,0,.5)';
+    document.body.appendChild(t); }
+  t.textContent = msg; t.style.display='block';
+  toastT = setTimeout(() => t.style.display='none', 4500);
+}
+function sheet(html){ $layer.innerHTML = `<div class="modal" id="modal"><div class="sheet">${html}</div></div>`;
+  document.getElementById('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeSheet(); }); }
+function closeSheet(){ $layer.innerHTML=''; }
+function go(view, extra){ Object.assign(S, {view}, extra||{}); speechSynthesis && speechSynthesis.cancel && speechSynthesis.cancel(); render(); window.scrollTo(0,0); }
+
+// ---------- obrazovky ----------
+function render(){
+  if (!S.loaded){
+    $app.innerHTML = S.loadErr ? `<h2>Nejde to načíst</h2><p class="mute">${esc(S.loadErr)}</p>` : '<p class="mute">Načítám tvoje místnosti…</p>';
+    return;
+  }
+  if (S.view === 'rooms') return renderRooms();
+  if (S.view === 'room') return renderRoom();
+  if (S.view === 'review') return renderReview();
+  renderToday();
+}
+
+function renderToday(){
+  const s = stats(), toReview = s.due + s.newToday;
+  let body;
+  if (!s.total){
+    body = `<h2>Začni první fotkou</h2>
+      <p class="mute">Vyfoť kuchyň. Appka na fotce najde věci a napíše k nim anglické názvy, výslovnost a větu.</p>
+      <button class="btn" data-act="newroom">📷 Vyfotit první místnost</button>`;
+  } else {
+    body = `<h2>${toReview ? 'Teď na řadě: ' + toReview + ' slov' : 'Na dnešek máš hotovo'}</h2>
+      <p class="mute">${toReview ? s.due + ' k opakování, ' + s.newToday + ' nových. Každé slovo řekni nahlas.' : 'Další slova přijdou, až je začneš zapomínat. Můžeš přidat novou místnost.'}</p>
+      <button class="btn" data-act="review" ${toReview ? '' : 'disabled'}>🎯 Začít zkoušení</button>
+      <button class="btn ghost" data-act="rooms">🏠 Moje místnosti</button>`;
+  }
+  $app.innerHTML = `<header><h1>Dnes</h1></header>
+    <div class="stats">
+      <div class="stat"><b>${s.streak}</b><span>dní v řadě</span></div>
+      <div class="stat"><b>${s.learned}</b><span>umíš (7+ dní)</span></div>
+      <div class="stat"><b>${s.total}</b><span>slov celkem</span></div>
+    </div>${body}
+    <div class="note"><b>Tip</b><br><span class="mute">Málo, ale často: 3–4 krátké bloky během dne fungují líp než jedna dlouhá hodina. Večer před spaním si dej ještě 5 minut opakování.</span></div>`;
+}
+
+function renderRooms(){
+  const cards = S.rooms.slice().sort((a,b)=>a.created-b.created).map(r => `
+    <button class="room" data-act="open" data-id="${r.id}">
+      <img src="${r.img}" alt="">
+      <div>${esc(r.name)}<small>${r.words.length} slov</small></div>
+    </button>`).join('');
+  $app.innerHTML = `<header><button class="back" data-act="home">←</button><h1>Moje místnosti</h1></header>
+    ${S.rooms.length ? `<div class="grid">${cards}</div>` : '<p class="mute">Zatím tu nic není. Vyfoť kuchyň, ložnici nebo fitko.</p>'}
+    <button class="btn" data-act="newroom">📷 Přidat místnost</button>`;
+}
+
+function renderRoom(){
+  const r = findRoom(S.roomId); if (!r) return go('rooms');
+  const labels = r.words.map(w => `<div class="label" data-wid="${w.id}" style="left:${w.x*100}%;top:${w.y*100}%">${S.hide && S.revealed !== w.id ? '?' : esc(w.en)}</div>`).join('');
+  $app.innerHTML = `<header><button class="back" data-act="rooms">←</button><h1>${esc(r.name)}</h1>
+      <button class="toggle" data-act="hide">${S.hide ? '👁 Ukázat' : '🙈 Skrýt'}</button></header>
+    <div class="photo" id="photo"><img src="${r.img}" alt="">${labels}</div>
+    <p class="hint">${S.addMode ? '<b>Ťukni na fotku tam, kde je věc, kterou chceš přidat.</b>'
+      : S.hide ? 'Řekni nahlas, co je pod otazníkem, a pak ťukni pro kontrolu.'
+      : 'Ťukni na štítek = výslovnost a detail. Táhni = posuň štítek.'}</p>
+    <div class="row">
+      <button class="btn ghost small" data-act="addword">${S.addMode ? 'Zrušit' : '+ Slovo'}</button>
+      <button class="btn ghost small" data-act="delroom">Smazat místnost</button>
+    </div>
+    <button class="btn" data-act="reviewroom" ${r.words.length ? '' : 'disabled'}>🎯 Zkoušet tuhle místnost</button>`;
+  wirePhoto(r);
+}
+
+function wirePhoto(r){
+  const photo = document.getElementById('photo');
+  let drag = null;
+  photo.addEventListener('pointerdown', e => {
+    const el = e.target.closest('.label');
+    if (!el) return;
+    drag = {el, w: r.words.find(w => w.id === el.dataset.wid), x0:e.clientX, y0:e.clientY, moved:false};
+    el.setPointerCapture(e.pointerId);
+  });
+  photo.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+    if (!drag.moved && Math.hypot(dx,dy) < 8) return;
+    drag.moved = true; drag.el.classList.add('dragging');
+    const b = photo.getBoundingClientRect();
+    drag.w.x = Math.min(1, Math.max(0, (e.clientX - b.left)/b.width));
+    drag.w.y = Math.min(1, Math.max(0, (e.clientY - b.top)/b.height));
+    drag.el.style.left = drag.w.x*100 + '%'; drag.el.style.top = drag.w.y*100 + '%';
+  });
+  const end = () => {
+    if (!drag) return;
+    const d = drag; drag = null; d.el.classList.remove('dragging');
+    if (d.moved){ saveRoom(r); return; }
+    if (S.hide && S.revealed !== d.w.id){ S.revealed = d.w.id; say(d.w.en); renderRoom(); }
+    else wordSheet(r, d.w);
+  };
+  photo.addEventListener('pointerup', end);
+  photo.addEventListener('pointercancel', () => { if (drag){ drag.el.classList.remove('dragging'); drag = null; } });
+  photo.addEventListener('click', e => {
+    if (!S.addMode || e.target.closest('.label')) return;
+    const b = photo.getBoundingClientRect();
+    S.addMode = false;
+    editSheet(r, null, (e.clientX-b.left)/b.width, (e.clientY-b.top)/b.height);
+  });
+}
+
+function wordSheet(r, w){
+  say(w.en);
+  sheet(`<div class="answer"><span style="flex:1">${esc(w.en)}</span>
+      <button class="icon" data-sheet="say">🔊</button><button class="icon" data-sheet="slow">🐢</button></div>
+    ${w.pron ? `<div style="font-size:18px">[${esc(w.pron)}]</div>` : ''}
+    <div style="font-size:20px;margin-top:4px">${esc(w.cs)}</div>
+    ${w.sen ? `<div class="sent" data-sheet="sen">🔊 ${esc(w.sen)}</div><div class="mute">${esc(w.scs)}</div>` : ''}
+    <div class="row" style="margin-top:16px">
+      <button class="btn ghost small" data-sheet="edit">✏️ Opravit</button>
+      <button class="btn ghost small" data-sheet="del">🗑 Smazat</button>
+    </div>`);
+  $layer.querySelector('.sheet').addEventListener('click', e => {
+    const a = e.target.closest('[data-sheet]'); if (!a) return;
+    const k = a.dataset.sheet;
+    if (k === 'say') say(w.en);
+    if (k === 'slow') say(w.en, true);
+    if (k === 'sen') say(w.sen);
+    if (k === 'edit') editSheet(r, w);
+    if (k === 'del'){ r.words = r.words.filter(x => x.id !== w.id); saveRoom(r); closeSheet(); renderRoom(); }
+  });
+}
+
+function editSheet(r, w, x, y){
+  const v = w || {};
+  sheet(`<h2>${w ? 'Opravit slovo' : 'Nové slovo'}</h2>
+    <label class="field">Anglicky<input type="text" id="f-en" value="${esc(v.en)}" autocomplete="off"></label>
+    <label class="field">Česky<input type="text" id="f-cs" value="${esc(v.cs)}" autocomplete="off"></label>
+    <label class="field">Výslovnost (nepovinné)<input type="text" id="f-pron" value="${esc(v.pron)}" autocomplete="off"></label>
+    <label class="field">Věta anglicky (nepovinné)<input type="text" id="f-sen" value="${esc(v.sen)}" autocomplete="off"></label>
+    <label class="field">Věta česky (nepovinné)<input type="text" id="f-scs" value="${esc(v.scs)}" autocomplete="off"></label>
+    <div class="row"><button class="btn ghost" data-e="cancel">Zrušit</button><button class="btn" data-e="ok">Uložit</button></div>`);
+  $layer.querySelector('.sheet').addEventListener('click', e => {
+    const a = e.target.closest('[data-e]'); if (!a) return;
+    if (a.dataset.e === 'cancel'){ closeSheet(); renderRoom(); return; }
+    const val = id => document.getElementById(id).value.trim();
+    if (!val('f-en')) { toast('Napiš anglické slovo.'); return; }
+    const data = {en:val('f-en'), cs:val('f-cs'), pron:val('f-pron'), sen:val('f-sen'), scs:val('f-scs')};
+    if (w) Object.assign(w, data);
+    else r.words.push({id: rid('w'), ...data, x: x ?? .5, y: y ?? .5, due:0, interval:0, ease:2.5, reps:0, lapses:0});
+    saveRoom(r); closeSheet(); renderRoom();
+  });
+}
+
+function newRoomSheet(){
+  const used = new Set(S.rooms.map(r => r.name));
+  const sug = ['Kuchyň','Ložnice','Chodba','Koupelna','Obývák','Fitko','Auto','Cesta do práce'].filter(s => !used.has(s));
+  sheet(`<h2>Co fotíš?</h2>
+    <div class="chips">${sug.map(s => `<button class="chip" data-n="${esc(s)}">${esc(s)}</button>`).join('')}</div>
+    <label class="field">Nebo vlastní název<input type="text" id="f-name" autocomplete="off"></label>
+    <label class="btn" style="cursor:pointer">📷 Vyfotit / vybrat fotku
+      <input type="file" id="f-file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden></label>
+    <p class="hint">Vyber název a pak vyfoť. Fotka zůstane jen v tvém účtu.</p>`);
+  const name = document.getElementById('f-name');
+  $layer.querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => {
+    name.value = b.dataset.n;
+    $layer.querySelectorAll('[data-n]').forEach(x => x.style.borderColor = x === b ? 'var(--accent)' : '');
+  }));
+  document.getElementById('f-file').addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    const n = name.value.trim() || 'Místnost ' + (S.rooms.length + 1);
+    closeSheet(); addRoom(n, f);
+  });
+}
+
+function startReview(roomId){
+  S.queue = buildQueue(roomId); S.qDone = 0; S.phase = 'ask';
+  go('review', {reviewRoom: roomId || null});
+}
+
+function renderReview(){
+  const head = `<header><button class="back" data-act="endreview">←</button><h1>Hotovo ${S.qDone} · zbývá ${S.queue.length}</h1></header>`;
+  const item = S.queue[0];
+  const w = item && findWord(item.r, item.w), r = item && findRoom(item.r);
+  if (!w || !r){
+    if (item){ S.queue.shift(); return renderReview(); }
+    $app.innerHTML = head + `<div style="text-align:center;padding:40px 0">
+      <div style="font-size:60px">✅</div><h2>Hotovo, ${S.qDone} slov.</h2>
+      <p class="mute">Každé slovo přijde znovu přesně ve chvíli, kdy ho začneš zapomínat.</p>
+      <button class="btn" data-act="home">Zpět na Dnes</button></div>`;
+    return;
+  }
+  const shown = S.phase === 'shown';
+  $app.innerHTML = head + `
+    <div class="photo"><img src="${r.img}" alt="">
+      ${shown ? `<div class="label" style="left:${w.x*100}%;top:${w.y*100}%">${esc(w.en)}</div>`
+              : `<div class="marker" style="left:${w.x*100}%;top:${w.y*100}%"></div>`}</div>
+    <p class="mute" style="margin:12px 0 0">${esc(r.name)}${isNew(w) ? ' · nové slovo' : ''}</p>
+    <h2>Řekni nahlas anglicky: ${esc(w.cs || '(co svítí na fotce)')}</h2>
+    ${shown ? `
+      <div class="answer"><span style="flex:1">${esc(w.en)}${w.pron ? ` <span style="font-weight:400;font-size:18px">[${esc(w.pron)}]</span>` : ''}</span>
+        <button class="icon" data-act="sayw">🔊</button></div>
+      ${w.sen ? `<div class="sent" data-act="says">🔊 ${esc(w.sen)}</div><div class="mute">${esc(w.scs)}</div>` : ''}
+      ${(w.lapses||0) >= 3 ? '<div class="note">Tohle slovo ti utíká. Vymysli si k němu vtipný obrázek nebo spojení s češtinou.</div>' : ''}
+      <p class="hint">Jak to šlo?</p>
+      <div class="row">
+        <button class="grade g0" data-g="0">Nevěděl</button><button class="grade g1" data-g="1">Těžké</button>
+        <button class="grade g2" data-g="2">Věděl</button><button class="grade g3" data-g="3">Snadné</button>
+      </div>`
+    : `<p class="mute">Nejdřív to opravdu řekni nahlas, i když si nejsi jistý. Pak se podívej.</p>
+       <button class="btn" data-act="show">Ukázat odpověď</button>`}`;
+}
+
+function grade(g){
+  const item = S.queue[0]; if (!item) return;
+  const r = findRoom(item.r), w = findWord(item.r, item.w);
+  if (!r || !w){ S.queue.shift(); return renderReview(); }
+  const wasNew = isNew(w);
+  applyGrade(w, g);
+  saveRoom(r);
+  const t = today();
+  if (wasNew){
+    S.meta.newCount = (S.meta.newDate === t ? (S.meta.newCount||0) : 0) + 1;
+    S.meta.newDate = t;
+  }
+  if (S.meta.streakDate !== t){
+    S.meta.streak = streak() + 1; S.meta.streakDate = t;
+  }
+  saveMeta();
+  S.queue.shift();
+  if (g === 0) S.queue.splice(Math.min(3, S.queue.length), 0, item);
+  else S.qDone++;
+  S.phase = 'ask';
+  renderReview(); window.scrollTo(0,0);
+}
+
+// ---------- kliknutí ----------
+$app.addEventListener('click', e => {
+  const g = e.target.closest('[data-g]');
+  if (g) return grade(Number(g.dataset.g));
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  const act = a.dataset.act;
+  if (act === 'home' || act === 'endreview') go('today');
+  else if (act === 'rooms') go('rooms', {addMode:false});
+  else if (act === 'newroom'){
+    if (!S.sample || !S.canImages){ toast('Rozpoznávání fotek tady teď nejde. Otevři appku přes claude.ai a povol Clauda.'); return; }
+    newRoomSheet();
+  }
+  else if (act === 'open') go('room', {roomId: a.dataset.id, hide:false, revealed:null, addMode:false});
+  else if (act === 'hide'){ S.hide = !S.hide; S.revealed = null; renderRoom(); }
+  else if (act === 'addword'){ S.addMode = !S.addMode; renderRoom(); }
+  else if (act === 'delroom') confirmDelete();
+  else if (act === 'review') startReview(null);
+  else if (act === 'reviewroom') startReview(S.roomId);
+  else if (act === 'show'){ S.phase = 'shown'; renderReview(); const it = S.queue[0]; const w = it && findWord(it.r, it.w); if (w) say(w.en); }
+  else if (act === 'sayw'){ const it = S.queue[0]; const w = it && findWord(it.r, it.w); if (w) say(w.en); }
+  else if (act === 'says'){ const it = S.queue[0]; const w = it && findWord(it.r, it.w); if (w) say(w.sen); }
+});
+
+function confirmDelete(){
+  const r = findRoom(S.roomId); if (!r) return;
+  sheet(`<h2>Smazat „${esc(r.name)}“?</h2><p class="mute">Smaže se fotka i všech ${r.words.length} slov z ní.</p>
+    <div class="row"><button class="btn ghost" data-d="no">Ne</button><button class="btn" style="background:var(--bad)" data-d="yes">Smazat</button></div>`);
+  $layer.querySelector('.sheet').addEventListener('click', e => {
+    const b = e.target.closest('[data-d]'); if (!b) return;
+    closeSheet();
+    if (b.dataset.d === 'yes'){ S.rooms = S.rooms.filter(x => x.id !== r.id); remove(r.id); go('rooms'); }
+  });
+}
+
+// ---------- start ----------
+(async () => {
+  render();
+  const [db, user, sample] = await Promise.all([
+    claude.use('db'), claude.use('user'), claude.use('sample')
+  ]);
+  S.db = db; S.sample = sample;
+  if (sample){
+    try{ const lim = await sample.limits(); S.canImages = !!(lim && lim.images); }catch(e){ S.canImages = false; }
+  }
+  S.uid = user ? await user.id() : null;
+  if (!db || !S.uid){
+    S.loadErr = 'Appka potřebuje, abys byl přihlášený na claude.ai. Otevři ji přes odkaz v Claudovi.';
+    render(); return;
+  }
+  const timer = setTimeout(() => { if (!S.loaded){ S.loadErr = 'Data se nedaří načíst. Zkontroluj připojení.'; render(); } }, 10000);
+  db.collection('data/users/' + S.uid).onSnapshot(snap => {
+    const rooms = [];
+    let meta = {};
+    for (const d of snap.docs){
+      const v = d.data(); if (!v) continue;
+      if (d.id === 'meta') meta = {...v};
+      else if (d.id.startsWith('room-')) rooms.push({id: d.id, ...JSON.parse(JSON.stringify(v)), words: (v.words || []).map(w => ({...w}))});
+    }
+    // první načtení, nebo změna z jiného zařízení
+    if (!S.loaded || !snap.metadata.hasPendingWrites){
+      S.rooms = rooms; S.meta = meta;
+    }
+    if (!snap.metadata.fromCache){ clearTimeout(timer); S.loadErr=''; }
+    const first = !S.loaded; S.loaded = true;
+    // během zkoušení a tažení štítků nepřekreslujeme, ať to neskáče
+    if (first || S.view === 'today' || S.view === 'rooms') render();
+  }, err => {
+    clearTimeout(timer);
+    S.loadErr = 'Data se nepodařilo načíst (' + (err && err.code) + ').'; render();
+  });
+})();
+</script>
+</body>
+</html>
