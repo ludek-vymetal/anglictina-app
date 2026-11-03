@@ -1,0 +1,14 @@
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+.idea/
+*.iml
+.DS_Store
+ios/Pods/
+ios/.symlinks/
+android/.gradle/
+android/local.properties
+# tajné klíče
+secrets.json
