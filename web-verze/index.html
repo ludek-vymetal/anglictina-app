@@ -135,28 +135,32 @@ function streak(){
   const d = S.meta.streakDate;
   return (d === today() || d === yesterday()) ? (S.meta.streak || 0) : 0;
 }
+const items = r => [...(r.words || []), ...(r.phrases || [])];
 function stats(){
-  const now = Date.now(); let total=0, learned=0, due=0, fresh=0;
-  for (const r of S.rooms) for (const w of r.words){
+  const now = Date.now(); let total=0, learned=0, due=0;
+  for (const r of S.rooms) for (const w of items(r)){
     total++; if ((w.interval||0) >= 7) learned++;
-    if (isNew(w)) fresh++; else if ((w.due||0) <= now) due++;
+    if (!isNew(w) && (w.due||0) <= now) due++;
   }
-  return {total, learned, due, newToday: Math.min(fresh, newLeft()), streak: streak()};
+  const next = nextLessonRoom();
+  return {total, learned, due, streak: streak(), next, rooms: S.rooms.length};
 }
+// opakování: jen to, co už prošlo lekcí a je na řadě (nová slova přicházejí v lekcích)
 function buildQueue(roomId){
   const now = Date.now(), due = [], fresh = [];
   for (const r of S.rooms){
     if (roomId && r.id !== roomId) continue;
-    for (const w of r.words){
-      if (isNew(w)) fresh.push({r:r.id, w:w.id});
+    for (const w of items(r)){
+      if (isNew(w)){ if (roomId) fresh.push({r:r.id, w:w.id}); }
       else if ((w.due||0) <= now) due.push({r:r.id, w:w.id, due:w.due||0});
     }
   }
   due.sort((a,b) => a.due - b.due);
-  return [...due, ...fresh.slice(0, newLeft())];
+  return [...due, ...fresh];
 }
 const findRoom = id => S.rooms.find(r => r.id === id);
-const findWord = (rId, wId) => { const r = findRoom(rId); return r ? r.words.find(w => w.id === wId) : null; };
+const findWord = (rId, wId) => { const r = findRoom(rId); return r ? items(r).find(w => w.id === wId) : null; };
+const nextLessonRoom = () => S.rooms.slice().sort((a,b)=>a.created-b.created).find(r => !r.done && r.words.length);
 
 // ---------- obrázky ----------
 function loadImage(file){
@@ -255,21 +259,27 @@ function render(){
   if (S.view === 'rooms') return renderRooms();
   if (S.view === 'room') return renderRoom();
   if (S.view === 'review') return renderReview();
+  if (S.view === 'lesson') return renderLesson();
   renderToday();
 }
 
 function renderToday(){
-  const s = stats(), toReview = s.due + s.newToday;
+  const s = stats();
   let body;
-  if (!s.total){
+  if (!s.rooms){
     body = `<h2>Začni první fotkou</h2>
       <p class="mute">Vyfoť kuchyň. Appka na fotce najde věci a napíše k nim anglické názvy, výslovnost a větu.</p>
       <button class="btn" data-act="newroom">📷 Vyfotit první místnost</button>`;
   } else {
-    body = `<h2>${toReview ? 'Teď na řadě: ' + toReview + ' slov' : 'Na dnešek máš hotovo'}</h2>
-      <p class="mute">${toReview ? s.due + ' k opakování, ' + s.newToday + ' nových. Každé slovo řekni nahlas.' : 'Další slova přijdou, až je začneš zapomínat. Můžeš přidat novou místnost.'}</p>
-      <button class="btn" data-act="review" ${toReview ? '' : 'disabled'}>🎯 Začít zkoušení</button>
-      <button class="btn ghost" data-act="rooms">🏠 Moje místnosti</button>`;
+    body = (s.next
+      ? `<h2>Další lekce: ${esc(s.next.name)}</h2>
+         <p class="mute">${s.next.words.length} slov · pokoj → kartičky → test v pokoji → věty. Zhruba 15–20 minut.</p>
+         <button class="btn" data-act="lesson">▶ Začít lekci</button>`
+      : `<h2>Všechny pokoje máš prošlé</h2>
+         <p class="mute">Vyfoť další místo (koupelnu, auto, fitko…) a appka z něj udělá novou lekci.</p>
+         <button class="btn" data-act="newroom">📷 Přidat další místnost</button>`)
+      + `<button class="btn ghost" data-act="review" ${s.due ? '' : 'disabled'}>🔁 Opakování${s.due ? ' · ' + s.due + ' na řadě' : ' · nic na řadě'}</button>
+         <button class="btn ghost" data-act="rooms">🏠 Moje místnosti</button>`;
   }
   $app.innerHTML = `<header><h1>Dnes</h1></header>
     <div class="stats">
@@ -304,7 +314,8 @@ function renderRoom(){
       <button class="btn ghost small" data-act="addword">${S.addMode ? 'Zrušit' : '+ Slovo'}</button>
       <button class="btn ghost small" data-act="delroom">Smazat místnost</button>
     </div>
-    <button class="btn" data-act="reviewroom" ${r.words.length ? '' : 'disabled'}>🎯 Zkoušet tuhle místnost</button>`;
+    <button class="btn" data-act="lessonroom" ${r.words.length ? '' : 'disabled'}>▶ ${r.done ? 'Projít lekci znovu' : 'Začít lekci'}</button>
+    <button class="btn ghost" data-act="reviewroom" ${r.words.length ? '' : 'disabled'}>🎯 Rychle prozkoušet</button>`;
   wirePhoto(r);
 }
 
@@ -469,6 +480,221 @@ function grade(g){
   renderReview(); window.scrollTo(0,0);
 }
 
+// ---------- LEKCE: pokoj (3× poslech) → kartičky do bezchyby → test v pokoji → věty → další pokoj ----------
+let L = null;
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const STEPS = [['intro','Pokoj'],['cards','Kartičky'],['test','Test v pokoji'],['phr','Věty']];
+
+function startLesson(roomId){
+  const r = findRoom(roomId); if (!r || !r.words.length) return;
+  L = {roomId, stage:'intro', kind:'words', list: r.words.map(w => w.id), i:0, rep:0, errors:{}, oldGraded:{}};
+  go('lesson');
+}
+function lessonRoom(){ return L && findRoom(L.roomId); }
+function cur(){ const r = lessonRoom(); return r && L.list ? findWord(r.id, L.list[L.i]) : null; }
+
+function startCards(ids, after, withOld){
+  const r = lessonRoom();
+  let deck = ids.map(id => ({r: r.id, w: id}));
+  if (withOld){
+    // nenápadně přimícháme pár kartiček z minulých lekcí, které jsou na řadě
+    const old = buildQueue(null).filter(it => it.r !== r.id).slice(0, 4).map(it => ({r: it.r, w: it.w, old: true}));
+    deck = shuffle([...deck, ...old]);
+  } else deck = shuffle(deck);
+  Object.assign(L, {stage:'cards', deck, di:0, round:1, roundErr:[], flipped:false, after});
+}
+function startTest(ids){ Object.assign(L, {stage:'test', list: ids, i:0, shown:false, testErr:[], passed: L.passed || {}}); }
+
+async function startPhrases(){
+  const r = lessonRoom();
+  if (!r.phrases || !r.phrases.length){
+    if (!S.sample){ return finishLesson(); }
+    busy('Připravuju věty k pokoji…<br><span class="mute">co tady běžně děláš: „musím pověsit záclony…“</span>');
+    try{
+      const words = r.words.map(w => w.en + ' (' + w.cs + ')').join(', ');
+      const list = await S.sample.json(
+`Jsi lektor angličtiny pro Čecha, úroveň začátečník (A1–A2). Místnost: "${r.name}". Slova, která se právě naučil: ${words}.
+Napiš 8 krátkých vět (max 8 slov) o tom, co v té místnosti běžně dělá nebo musí udělat, v 1. osobě. Střídej vazby "I have to…", "I need to…", "I'm going to…", "I usually…", "Can you…?". Každá věta ať používá jedno z naučených slov (např. "I have to hang the curtains.").
+Ke každé vrať objekt {"en": anglicky, "cs": přirozeně česky, "pron": výslovnost přepsaná česky}. Odpověz pouze JSON polem.`);
+      r.phrases = (Array.isArray(list) ? list : []).filter(o => o && o.en).slice(0, 10).map(o => ({
+        id: rid('p'), en: String(o.en).trim(), cs: String(o.cs||'').trim(), pron: String(o.pron||'').trim(),
+        due:0, interval:0, ease:2.5, reps:0, lapses:0
+      }));
+      await saveRoom(r);
+    }catch(e){
+      unbusy(); toast(SAMPLE_ERR[e && e.code] || 'Věty se nepodařilo připravit, lekci dokončím bez nich.');
+      return finishLesson();
+    }
+    unbusy();
+  }
+  if (!r.phrases.length) return finishLesson();
+  Object.assign(L, {stage:'intro', kind:'phrases', list: r.phrases.map(p => p.id), i:0, rep:0});
+  renderLesson();
+}
+
+function finishLesson(){
+  const r = lessonRoom(); if (!r) return go('today');
+  for (const w of items(r)) applyGrade(w, L.errors[w.id] ? 1 : 2);
+  r.done = true; saveRoom(r);
+  const t = today();
+  if (S.meta.streakDate !== t){ S.meta.streak = streak() + 1; S.meta.streakDate = t; saveMeta(); }
+  L.stage = 'done'; renderLesson(); window.scrollTo(0,0);
+}
+
+function lessonAct(k, el){
+  const r = lessonRoom(); if (!r) return go('today');
+  if (k === 'listen'){                       // 3× poslech + zopakuj nahlas
+    const w = cur(); if (!w) return;
+    say(w.en); L.rep = Math.min(3, L.rep + 1); renderLesson();
+  } else if (k === 'next'){
+    L.i++; L.rep = 0;
+    if (L.i >= L.list.length){
+      if (L.kind === 'words') startCards(L.list, 'test', true);
+      else startCards(L.list, 'finish', false);
+    }
+    renderLesson(); window.scrollTo(0,0);
+  } else if (k === 'flip'){
+    L.flipped = true; renderLesson();
+    const it = L.deck[L.di]; const w = it && findWord(it.r, it.w); if (w) say(w.en);
+  } else if (k === 'sayc'){
+    const it = L.deck[L.di]; const w = it && findWord(it.r, it.w); if (w) say(w.en);
+  } else if (k === 'know' || k === 'miss'){
+    const it = L.deck[L.di]; const w = it && findWord(it.r, it.w);
+    const ok = k === 'know';
+    if (w){
+      if (!ok){ L.roundErr.push(it); if (!it.old) L.errors[w.id] = (L.errors[w.id]||0) + 1; }
+      if (it.old && !L.oldGraded[w.id]){ L.oldGraded[w.id] = 1; applyGrade(w, ok ? 2 : 0); saveRoom(findRoom(it.r)); }
+    }
+    L.di++; L.flipped = false;
+    if (L.di >= L.deck.length){
+      if (!L.roundErr.length){
+        if (L.after === 'test') startTest(L.testIds || r.words.map(w => w.id));
+        else return finishLesson();
+      } else {
+        L.deck = shuffle(L.roundErr); L.roundErr = []; L.di = 0; L.round++;
+      }
+    }
+    renderLesson(); window.scrollTo(0,0);
+  } else if (k === 'show'){
+    L.shown = true; renderLesson(); const w = cur(); if (w) say(w.en);
+  } else if (k === 'tok' || k === 'tbad'){
+    const w = cur();
+    if (w){ if (k === 'tok') L.passed[w.id] = 1; else { L.testErr.push(w.id); L.errors[w.id] = (L.errors[w.id]||0) + 1; } }
+    L.i++; L.shown = false;
+    if (L.i >= L.list.length){
+      if (!L.testErr.length){ L.stage = 'testok'; }
+      else { L.testIds = L.testErr.slice(); startCards(L.testErr, 'test', false); L.stage = 'testbad'; }
+    }
+    renderLesson(); window.scrollTo(0,0);
+  } else if (k === 'tocards'){ L.stage = 'cards'; renderLesson(); }
+  else if (k === 'phrases'){ startPhrases(); }
+  else if (k === 'nextlesson'){ const n = nextLessonRoom(); if (n) startLesson(n.id); else go('today'); }
+}
+
+function stepsBar(){
+  const st = L.stage === 'done' ? 'phr' : (L.kind === 'phrases' ? 'phr' : (L.stage === 'testok' || L.stage === 'testbad') ? 'test' : L.stage);
+  const idx = STEPS.findIndex(s => s[0] === st);
+  return `<div class="row" style="gap:4px;margin:-6px 0 14px">${STEPS.map((s,i) =>
+    `<div style="text-align:center;font-size:11px;color:${i<=idx?'var(--ink)':'var(--mute)'}"><div style="height:4px;border-radius:2px;margin-bottom:4px;background:${i<idx?'var(--good)':i===idx?'var(--accent)':'var(--line)'}"></div>${s[1]}</div>`).join('')}</div>`;
+}
+
+function photoWith(r, opts){
+  const labels = r.words.map(w => {
+    if (opts.only && opts.only !== w.id && !opts.all) return '';
+    const isCur = opts.cur === w.id;
+    if (opts.test){
+      if (isCur && !opts.shown) return `<div class="marker" style="left:${w.x*100}%;top:${w.y*100}%"></div>`;
+      if (isCur) return `<div class="label dragging" style="left:${w.x*100}%;top:${w.y*100}%">${esc(w.en)}</div>`;
+      if (opts.passed && opts.passed[w.id]) return `<div class="label" style="left:${w.x*100}%;top:${w.y*100}%;background:rgba(51,194,122,.92)">${esc(w.en)}</div>`;
+      return `<div class="label" style="left:${w.x*100}%;top:${w.y*100}%;opacity:.55">?</div>`;
+    }
+    return `<div class="label ${isCur ? 'dragging' : ''}" style="left:${w.x*100}%;top:${w.y*100}%;${isCur ? '' : 'opacity:.45'}">${esc(w.en)}</div>`;
+  }).join('');
+  return `<div class="photo"><img src="${r.img}" alt="" ${opts.dim ? 'style="opacity:.35"' : ''}>${opts.noLabels ? '' : labels}</div>`;
+}
+
+function renderLesson(){
+  const r = lessonRoom(); if (!r || !L) return go('today');
+  const head = `<header><button class="back" data-act="home">←</button><h1>${esc(r.name)}</h1></header>` + stepsBar();
+  const st = L.stage;
+
+  if (st === 'intro'){
+    const w = cur(); if (!w) return lessonAct('next');
+    const isPh = L.kind === 'phrases';
+    $app.innerHTML = head + (isPh ? photoWith(r, {dim:true, noLabels:true}) : photoWith(r, {cur: w.id, all:true})) + `
+      <p class="mute" style="margin:12px 0 0">${isPh ? 'Věta' : 'Slovo'} ${L.i+1} z ${L.list.length}</p>
+      <div class="answer"><span style="flex:1">${esc(w.en)}</span></div>
+      ${w.pron ? `<div style="font-size:18px">[${esc(w.pron)}]</div>` : ''}
+      <div style="font-size:20px;margin-top:2px">${esc(w.cs)}</div>
+      ${!isPh && w.sen ? `<div class="sent">${esc(w.sen)}</div><div class="mute">${esc(w.scs)}</div>` : ''}
+      <p class="hint">Poslechni si to a pokaždé to nahlas zopakuj. ${'●'.repeat(L.rep)}${'○'.repeat(3-L.rep)}</p>
+      ${L.rep < 3
+        ? `<button class="btn" data-act="L:listen">🔊 Poslechnout a zopakovat (${L.rep+1}/3)</button>`
+        : `<button class="btn" data-act="L:next">${L.i+1 < L.list.length ? 'Další →' : isPh ? 'Hotovo, jdeme na kartičky →' : 'Hotovo, jdeme na kartičky →'}</button>
+           <button class="btn ghost small" data-act="L:listen">🔊 Ještě jednou</button>`}`;
+    return;
+  }
+
+  if (st === 'cards' || st === 'testbad'){
+    if (st === 'testbad'){
+      $app.innerHTML = head + `<div class="note"><b>${L.testIds.length} ${L.testIds.length === 1 ? 'slovo ti ještě nejde' : 'slova ti ještě nejdou'}.</b><br>
+        <span class="mute">Projdeme je na kartičkách, dokud nebudou bez chyby, a pak je zkusíme znovu v pokoji.</span></div>
+        <button class="btn" data-act="L:tocards">Na kartičky →</button>`;
+      return;
+    }
+    const it = L.deck[L.di]; const w = it && findWord(it.r, it.w);
+    if (!w){ L.di++; return renderLesson(); }
+    const isPh = L.kind === 'phrases' || (it.old && findRoom(it.r) && (findRoom(it.r).phrases||[]).some(p => p.id === w.id));
+    $app.innerHTML = head + `
+      <p class="mute" style="margin:0">Kolo ${L.round}${L.round > 1 ? ' · jen to, co nešlo' : ''} · kartička ${L.di+1} z ${L.deck.length}</p>
+      <div class="note" style="min-height:220px;display:flex;flex-direction:column;justify-content:center;text-align:center;margin-top:12px">
+        ${it.old ? `<div class="mute" style="font-size:13px">z minulé lekce · ${esc(findRoom(it.r).name)}</div>` : ''}
+        <div style="font-size:${isPh ? 22 : 30}px;font-weight:750;margin:6px 0">${esc(w.cs)}</div>
+        ${L.flipped
+          ? `<div style="height:1px;background:var(--line);margin:12px 0"></div>
+             <div style="font-size:${isPh ? 22 : 30}px;font-weight:800;color:var(--blue)" data-act="L:sayc">${esc(w.en)} 🔊</div>
+             ${w.pron ? `<div class="mute">[${esc(w.pron)}]</div>` : ''}`
+          : `<div class="mute">Řekni to nahlas anglicky</div>`}
+      </div>
+      ${L.flipped
+        ? `<div class="row" style="margin-top:12px"><button class="grade g0" data-act="L:miss">✗ Nevěděl</button><button class="grade g2" data-act="L:know">✓ Věděl</button></div>`
+        : `<button class="btn" data-act="L:flip">Otočit kartičku</button>`}`;
+    return;
+  }
+
+  if (st === 'test'){
+    const w = cur(); if (!w) return lessonAct('tok');
+    $app.innerHTML = head + photoWith(r, {test:true, cur:w.id, shown:L.shown, passed:L.passed}) + `
+      <p class="mute" style="margin:12px 0 0">${L.i+1} z ${L.list.length}</p>
+      <h2>Co svítí na fotce? Řekni to nahlas.</h2>
+      ${L.shown
+        ? `<div class="answer"><span style="flex:1">${esc(w.en)}</span></div><div class="mute">${esc(w.cs)}</div>
+           <div class="row" style="margin-top:12px"><button class="grade g0" data-act="L:tbad">✗ Spletl jsem se</button><button class="grade g2" data-act="L:tok">✓ Věděl jsem</button></div>`
+        : `<button class="btn" data-act="L:show">Ukázat</button>`}`;
+    return;
+  }
+
+  if (st === 'testok'){
+    $app.innerHTML = head + photoWith(r, {all:true}) + `
+      <h2 style="margin-top:14px">Pokoj máš bez chyby 💪</h2>
+      <p class="mute">Teď věty: co tady běžně děláš nebo musíš udělat. Tak se ze slovíček stane řeč.</p>
+      <button class="btn" data-act="L:phrases">Na věty →</button>`;
+    return;
+  }
+
+  if (st === 'done'){
+    const n = nextLessonRoom();
+    const errs = Object.values(L.errors).reduce((a,b)=>a+b, 0);
+    $app.innerHTML = head + `<div style="text-align:center;padding:24px 0">
+      <div style="font-size:60px">🏆</div><h2>Lekce „${esc(r.name)}“ hotová</h2>
+      <p class="mute">${r.words.length} slov${(r.phrases||[]).length ? ' a ' + r.phrases.length + ' vět' : ''} · ${errs} ${errs === 1 ? 'chyba' : errs >= 2 && errs <= 4 ? 'chyby' : 'chyb'} cestou.<br>
+      Všechno se ti teď bude vracet v opakování, přesně když to začneš zapomínat.</p></div>
+      ${n ? `<button class="btn" data-act="L:nextlesson">▶ Další lekce: ${esc(n.name)}</button>`
+          : `<button class="btn" data-act="newroom">📷 Vyfotit další místnost</button>`}
+      <button class="btn ghost" data-act="home">Zpět na Dnes</button>`;
+  }
+}
+
 // ---------- kliknutí ----------
 $app.addEventListener('click', e => {
   const g = e.target.closest('[data-g]');
@@ -486,6 +712,9 @@ $app.addEventListener('click', e => {
   else if (act === 'addword'){ S.addMode = !S.addMode; renderRoom(); }
   else if (act === 'delroom') confirmDelete();
   else if (act === 'review') startReview(null);
+  else if (act === 'lesson'){ const r = nextLessonRoom(); if (r) startLesson(r.id); }
+  else if (act === 'lessonroom') startLesson(S.roomId);
+  else if (act.startsWith('L:')) lessonAct(act.slice(2), a);
   else if (act === 'reviewroom') startReview(S.roomId);
   else if (act === 'show'){ S.phase = 'shown'; renderReview(); const it = S.queue[0]; const w = it && findWord(it.r, it.w); if (w) say(w.en); }
   else if (act === 'sayw'){ const it = S.queue[0]; const w = it && findWord(it.r, it.w); if (w) say(w.en); }
