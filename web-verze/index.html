@@ -33,8 +33,10 @@
   .room small{display:block;color:var(--mute);font-weight:400}
   .photo{position:relative;width:100%;border-radius:14px;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
   .photo img{display:block;width:100%;pointer-events:none}
-  .label{position:absolute;transform:translate(-50%,-50%);background:rgba(30,94,255,.92);border:1.5px solid #fff;border-radius:20px;padding:5px 10px;font-weight:700;font-size:14px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.5);touch-action:none}
-  .label.dragging{background:var(--accent2);color:#111}
+  .label{position:absolute;transform:translate(-50%,-50%);background:rgba(30,94,255,.9);border:1px solid #fff;border-radius:14px;padding:2px 7px;font-weight:700;font-size:12px;line-height:1.35;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.5);touch-action:none}
+  .label.dragging{background:var(--accent2);color:#111;font-size:15px;padding:4px 10px;z-index:2}
+  .dot{position:absolute;width:9px;height:9px;transform:translate(-50%,-50%);border-radius:50%;background:rgba(255,255,255,.75);border:1px solid rgba(0,0,0,.4)}
+  .photo{margin:0 auto}
   .marker{position:absolute;width:34px;height:34px;transform:translate(-50%,-50%);border-radius:50%;background:rgba(255,196,0,.85);border:3px solid #fff;animation:pulse .9s ease-in-out infinite alternate}
   @keyframes pulse{from{transform:translate(-50%,-50%) scale(.8)}to{transform:translate(-50%,-50%) scale(1.25)}}
   .hint{font-size:13px;color:var(--mute);text-align:center;margin:8px 0 0}
@@ -263,6 +265,44 @@ function sheet(html){ $layer.innerHTML = `<div class="modal" id="modal"><div cla
 function closeSheet(){ $layer.innerHTML=''; }
 function go(view, extra){ Object.assign(S, {view}, extra||{}); speechSynthesis && speechSynthesis.cancel && speechSynthesis.cancel(); render(); window.scrollTo(0,0); }
 
+// fotka nesmí zabrat celou obrazovku: výšku omezíme a šířku dopočítáme podle poměru stran
+const pstyle = (r, vh) => `style="aspect-ratio:${r.w}/${r.h};max-width:calc(${vh}vh * ${(r.w/r.h).toFixed(4)})"`;
+// rozhrne štítky, které se překrývají (posune je kousek nahoru/dolů)
+function declutter(photo){
+  const ls = [...photo.querySelectorAll('.label')]; if (ls.length < 2) return;
+  ls.forEach(l => { l.style.marginTop = '0px'; l.style.marginLeft = '0px'; });
+  const H = photo.clientHeight, p0 = photo.getBoundingClientRect();
+  ls.forEach(l => { const r = l.getBoundingClientRect();
+    if (r.left < p0.left) l.style.marginLeft = (p0.left - r.left + 2) + 'px';
+    if (r.right > p0.right) l.style.marginLeft = (p0.right - r.right - 2) + 'px'; });
+  for (let it = 0; it < 8; it++){
+    let moved = false;
+    const rs = ls.map(l => l.getBoundingClientRect());
+    for (let i = 0; i < ls.length; i++) for (let j = i + 1; j < ls.length; j++){
+      const a = rs[i], b = rs[j];
+      const ox = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const oy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      if (ox > 2 && oy > 0){
+        const lower = a.top <= b.top ? j : i, upper = lower === j ? i : j;
+        const shift = oy / 2 + 2;
+        ls[lower].style.marginTop = (parseFloat(ls[lower].style.marginTop) + shift) + 'px';
+        ls[upper].style.marginTop = (parseFloat(ls[upper].style.marginTop) - shift) + 'px';
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  // nic nesmí utéct mimo fotku
+  const pr = photo.getBoundingClientRect();
+  ls.forEach(l => { const r = l.getBoundingClientRect();
+    if (r.top < pr.top) l.style.marginTop = (parseFloat(l.style.marginTop) + pr.top - r.top + 1) + 'px';
+    if (r.bottom > pr.top + H) l.style.marginTop = (parseFloat(l.style.marginTop) - (r.bottom - pr.top - H) - 1) + 'px';
+    if (r.left < pr.left) l.style.marginLeft = (pr.left - r.left + 2) + 'px';
+    if (r.right > pr.right) l.style.marginLeft = (pr.right - r.right - 2) + 'px'; });
+}
+new MutationObserver(() => requestAnimationFrame(() => document.querySelectorAll('.photo').forEach(declutter)))
+  .observe(document.getElementById('app'), {childList:true, subtree:true});
+
 // ---------- obrazovky ----------
 function render(){
   if (!S.loaded){
@@ -319,7 +359,7 @@ function renderRoom(){
   const labels = r.words.map(w => `<div class="label" data-wid="${w.id}" style="left:${w.x*100}%;top:${w.y*100}%">${S.hide && S.revealed !== w.id ? '?' : esc(w.en)}</div>`).join('');
   $app.innerHTML = `<header><button class="back" data-act="rooms">←</button><h1>${esc(r.name)}</h1>
       <button class="toggle" data-act="hide">${S.hide ? '👁 Ukázat' : '🙈 Skrýt'}</button></header>
-    <div class="photo" id="photo"><img src="${r.img}" alt="">${labels}</div>
+    <div class="photo" id="photo" ${pstyle(r, 55)}><img src="${r.img}" alt="">${labels}</div>
     <p class="hint">${S.addMode ? '<b>Ťukni na fotku tam, kde je věc, kterou chceš přidat.</b>'
       : S.hide ? 'Řekni nahlas, co je pod otazníkem, a pak ťukni pro kontrolu.'
       : 'Ťukni na štítek = výslovnost a detail. Táhni = posuň štítek.'}</p>
@@ -339,6 +379,7 @@ function wirePhoto(r){
     const el = e.target.closest('.label');
     if (!el) return;
     drag = {el, w: r.words.find(w => w.id === el.dataset.wid), x0:e.clientX, y0:e.clientY, moved:false};
+    el.style.marginTop = '0px'; el.style.marginLeft = '0px';
     el.setPointerCapture(e.pointerId);
   });
   photo.addEventListener('pointermove', e => {
@@ -451,7 +492,7 @@ function renderReview(){
   }
   const shown = S.phase === 'shown';
   $app.innerHTML = head + `
-    <div class="photo"><img src="${r.img}" alt="">
+    <div class="photo" ${pstyle(r, 46)}><img src="${r.img}" alt="">
       ${shown ? `<div class="label" style="left:${w.x*100}%;top:${w.y*100}%">${esc(w.en)}</div>`
               : `<div class="marker" style="left:${w.x*100}%;top:${w.y*100}%"></div>`}</div>
     <p class="mute" style="margin:12px 0 0">${esc(r.name)}${isNew(w) ? ' · nové slovo' : ''}</p>
@@ -702,9 +743,10 @@ function photoWith(r, opts){
       if (opts.passed && opts.passed[w.id]) return `<div class="label" style="left:${w.x*100}%;top:${w.y*100}%;background:rgba(51,194,122,.92)">${esc(w.en)}</div>`;
       return `<div class="label" style="left:${w.x*100}%;top:${w.y*100}%;opacity:.55">?</div>`;
     }
-    return `<div class="label ${isCur ? 'dragging' : ''}" style="left:${w.x*100}%;top:${w.y*100}%;${isCur || opts.all && !opts.cur ? '' : 'opacity:.45'}">${esc(w.en)}</div>`;
+    if (opts.cur && !isCur) return `<div class="dot" style="left:${w.x*100}%;top:${w.y*100}%"></div>`;
+    return `<div class="label ${isCur ? 'dragging' : ''}" style="left:${w.x*100}%;top:${w.y*100}%">${esc(w.en)}</div>`;
   }).join('');
-  return `<div class="photo"><img src="${r.img}" alt="" ${opts.dim ? 'style="opacity:.3"' : ''}>${opts.noLabels ? '' : labels}</div>`;
+  return `<div class="photo" ${pstyle(r, opts.dim ? 30 : 46)}><img src="${r.img}" alt="" ${opts.dim ? 'style="opacity:.3"' : ''}>${opts.noLabels ? '' : labels}</div>`;
 }
 
 function renderLesson(){
