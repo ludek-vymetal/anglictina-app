@@ -89,23 +89,46 @@ const yesterday = () => { const d=new Date(Date.now()-864e5); return d.getFullYe
 const rid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 
 // ---------- hlas ----------
-function say(text, slow){
-  try{
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'en-US'; u.rate = slow ? 0.6 : 0.9;
-    const v = speechSynthesis.getVoices().find(v => v.lang && v.lang.replace('_','-').startsWith('en-US'));
-    if (v) u.voice = v;
-    speechSynthesis.cancel(); speechSynthesis.speak(u);
-  }catch(e){}
+// iPhone (Safari) má u hlasu několik chyb: první řeč musí zaznít přímo z ťuknutí,
+// "cancel" těsně před "speak" ji umlčí a některé anglické hlasy jsou jen efektové (Bells, Bad News…).
+const NICE_VOICES = ['Samantha','Alex','Ava','Allison','Susan','Tom','Karen','Daniel','Moira','Google US English','Microsoft Aria','Microsoft Jenny'];
+let voiceCache = null;
+function pickVoice(){
+  if (voiceCache) return voiceCache;
+  let vs = [];
+  try{ vs = speechSynthesis.getVoices() || []; }catch(e){}
+  const en = vs.filter(v => v.lang && v.lang.replace('_','-').toLowerCase().startsWith('en'));
+  for (const n of NICE_VOICES){ const v = en.find(v => v.name && v.name.indexOf(n) === 0); if (v) return (voiceCache = v); }
+  return null;   // radši žádný konkrétní hlas: systém vybere výchozí anglický podle jazyka
 }
+try{ speechSynthesis.onvoiceschanged = () => { voiceCache = null; }; }catch(e){}
+let ttsUnlocked = false;
+document.addEventListener('pointerdown', () => {
+  if (ttsUnlocked) return; ttsUnlocked = true;
+  try{ const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); }catch(e){}
+}, true);
 
-function sayMany(list){
-  try{
-    speechSynthesis.cancel();
-    const v = speechSynthesis.getVoices().find(v => v.lang && v.lang.replace('_','-').startsWith('en-US'));
-    for (const t of list){ const u = new SpeechSynthesisUtterance(t); u.lang='en-US'; u.rate=0.9; if (v) u.voice=v; speechSynthesis.speak(u); }
-  }catch(e){}
+function speakList(list, slow){
+  let synth; try{ synth = window.speechSynthesis; }catch(e){}
+  if (!synth || typeof SpeechSynthesisUtterance === 'undefined'){ toast('Tenhle prohlížeč neumí přehrát výslovnost.'); return; }
+  const go = () => {
+    try{
+      synth.resume();
+      const v = pickVoice();
+      for (const t of list){
+        if (!t) continue;
+        const u = new SpeechSynthesisUtterance(t);
+        u.lang = 'en-US'; u.rate = slow ? 0.6 : 0.9; u.volume = 1;
+        if (v) u.voice = v;
+        synth.speak(u);
+      }
+    }catch(e){}
+  };
+  if (synth.speaking || synth.pending){ synth.cancel(); setTimeout(go, 120); }
+  else go();
 }
+function say(text, slow){ speakList([text], slow); }
+function sayMany(list){ speakList(list); }
 
 // ---------- zápisy: jeden zápis na dokument najednou ----------
 const chains = {};
